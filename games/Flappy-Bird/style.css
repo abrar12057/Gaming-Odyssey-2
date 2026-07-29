@@ -1,0 +1,22 @@
+body {
+    margin: 0;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+    background: radial-gradient(circle at top, #75c8ff, #10283d);
+    touch-action: manipulation;
+}
+canvas {
+    background: linear-gradient(#4facfe, #b0e6ff);
+    border: 4px solid #fff;
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0,243,255,0.5);
+    width: min(calc(100vw - 24px), 360px);
+    height: auto;
+    max-height: calc(100vh - 24px);
+    object-fit: contain;
+    touch-action: manipulation;
+}
