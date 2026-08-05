@@ -1,34 +1,36 @@
-console.log('[ProStrker] main.js loaded - ULTIMATE EDITION');
+// ===== PRO STRIKER - main.js =====
+console.log('[ProStriker] main.js loaded - ULTIMATE EDITION WITH TOURNAMENT');
 
 let gameRunning = false;
 let celebrationTimer = 0;
 let isCelebrating = false;
 
-// ---------- GOAL & CELEBRATION ----------
 function triggerGoal(bannerText, concedingTeam, goalX, goalY) {
     try {
         lastScorer = bannerText || '';
-        // Update stats
         if (concedingTeam === 'red') matchStats.shots.blue++;
         else matchStats.shots.red++;
-
-        screenShake.duration = 25; screenShake.intensity = 8;
-        goalZoomScale = 1.8;
+        screenShake = { duration: 32, intensity: 22, x: 0, y: 0 };
+        goalZoomScale = 2.8;
         if (ball) { ball.vx = 0; ball.vy = 0; ball.owner = null; }
-
         if (typeof SoundManager !== 'undefined') {
             try { SoundManager.playGoalSounds(); } catch(e) {}
             try { SoundManager.stopMusic(); } catch(e) {}
         }
-
+        if (gameWrapperElem) {
+            gameWrapperElem.classList.remove('shake-impact');
+            void gameWrapperElem.offsetWidth;
+            gameWrapperElem.classList.add('shake-impact');
+        }
         const teamColor = (concedingTeam === 'red') ? '#ff5252' : '#48dbfb';
         spawnCelebration(goalX, goalY, teamColor);
-        const flash = document.getElementById('goalFlash');
-        if (flash) { flash.classList.remove('active'); void flash.offsetWidth; flash.classList.add('active'); }
+        if (goalFlashElem) {
+            goalFlashElem.classList.remove('active');
+            void goalFlashElem.offsetWidth;
+            goalFlashElem.classList.add('active');
+        }
         const overlay = document.getElementById('celebrationOverlay');
         if (overlay) { overlay.classList.add('active'); setTimeout(() => overlay.classList.remove('active'), 1000); }
-
-        // Scorer celebration
         let scorer = ball.cooldownPlayer || ball.owner;
         if (scorer) {
             const targetX = concedingTeam === 'red' ? 875 : 25;
@@ -38,6 +40,7 @@ function triggerGoal(bannerText, concedingTeam, goalX, goalY) {
             isCelebrating = true;
             celebrationTimer = 60;
         }
+        nextKickoffTeam = concedingTeam;
         console.log('[GOAL]', bannerText);
     } catch(e) { console.error(e); }
 }
@@ -76,18 +79,37 @@ function updateCelebration() {
     }
 }
 
-// ---------- PLAYERS ----------
-function createPlayers() {
+function createPlayers(teamAId, teamBId) {
     players = [];
-    const create = (id, team, x, y, isGk, num, col, gradCol) => ({
+    const create = (id, team, x, y, isGk, num, col, gradCol, teamId) => ({
         id, team, x, y, radius: 16,
         color: col, gradColor: gradCol,
         isGk, num,
+        teamId: teamId || null,
         ejecting: false, ejectTargetX: 0, ejectTargetY: 0,
         stamina: 1.0,
         celebration: false,
         celebrationTimer: 0
     });
+
+    if (tournamentMode && teamAId !== undefined && teamBId !== undefined && teamAId !== null && teamBId !== null) {
+        const teamA = TOURNAMENT_TEAMS.find(t => t.id === teamAId);
+        const teamB = TOURNAMENT_TEAMS.find(t => t.id === teamBId);
+        if (teamA && teamB) {
+            const darkA = darkenColor(teamA.color);
+            const darkB = darkenColor(teamB.color);
+            players.push(create(0,'red',50,300,true,'1', teamA.color, darkA, teamA.id));
+            players.push(create(1,'red',250,150,false,'7', teamA.color, darkA, teamA.id));
+            players.push(create(2,'red',250,450,false,'9', teamA.color, darkA, teamA.id));
+            players.push(create(3,'red',380,300,false,'10', teamA.color, darkA, teamA.id));
+            players.push(create(4,'blue',850,300,true,'1', teamB.color, darkB, teamB.id));
+            players.push(create(5,'blue',650,150,false,'8', teamB.color, darkB, teamB.id));
+            players.push(create(6,'blue',650,450,false,'11', teamB.color, darkB, teamB.id));
+            players.push(create(7,'blue',520,300,false,'10', teamB.color, darkB, teamB.id));
+            return;
+        }
+    }
+
     players.push(create(0,'red',50,300,true,'1','#e74c3c','#c0392b'));
     players.push(create(1,'red',250,150,false,'7','#ff5252','#d63031'));
     players.push(create(2,'red',250,450,false,'9','#ff5252','#d63031'));
@@ -98,8 +120,17 @@ function createPlayers() {
     players.push(create(7,'blue',520,300,false,'10','#48dbfb','#0984e3'));
 }
 
-// ---------- MATCH INIT ----------
-function initMatch() {
+function darkenColor(hex) {
+    let r = parseInt(hex.slice(1,3), 16);
+    let g = parseInt(hex.slice(3,5), 16);
+    let b = parseInt(hex.slice(5,7), 16);
+    r = Math.max(0, r - 40);
+    g = Math.max(0, g - 40);
+    b = Math.max(0, b - 40);
+    return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+function initMatch(teamAId, teamBId) {
     score = { red:0, blue:0 };
     matchStats = {
         possession:{red:0, blue:0},
@@ -107,6 +138,7 @@ function initMatch() {
         passes:{red:0, blue:0},
         tackles:{red:0, blue:0},
         possessionTimer:{red:0, blue:0},
+        gkSaves:{red:0, blue:0},
         winStreak: matchStats.winStreak || 0,
         totalMatches: matchStats.totalMatches || 0
     };
@@ -116,17 +148,41 @@ function initMatch() {
     matchState = 'PLAY';
     halftimeTimer = 0;
     kickoffDelay = 0.5;
-    matchTimeProgress = 0;
     isCelebrating = false;
     celebrationTimer = 0;
     celebrationParticles = [];
-    resetField();
-    document.getElementById('quickRematch').style.display = 'none';
-    isQuickRematchVisible = false;
+
+    if (tournamentMode && teamAId !== undefined && teamBId !== undefined && teamAId !== null && teamBId !== null) {
+        currentMatchTeamAId = teamAId;
+        currentMatchTeamBId = teamBId;
+        createPlayers(teamAId, teamBId);
+        let outfielders = players.filter(p => p.team === 'red' && !p.isGk);
+        if (outfielders.length > 0) {
+            ball.owner = outfielders[Math.floor(Math.random() * outfielders.length)];
+        } else {
+            ball.owner = null;
+        }
+    } else {
+        currentMatchTeamAId = null;
+        currentMatchTeamBId = null;
+        createPlayers();
+        resetField();
+        return;
+    }
+
+    ball.x = 450; ball.y = 300; ball.vx = 0; ball.vy = 0;
+    ball.cooldownPlayer = null; ball.cooldownTimer = 0;
+    ball.trail = [];
+
+    aiTimer = 0; aiDribbleTime = 0; aiPassCooldown = 0; aiHoldBallTimer = 0;
+    aiState = 'CHASE'; aiStateTimer = 0; gkTimer = 0;
+    aiStartDelay = 60; aiReactionTimer = 20;
+    activeLocks.red = { player: null, timer: 0 };
+    activeLocks.blue = { player: null, timer: 0 };
 }
 
 function resetField() {
-    createPlayers();
+    createPlayers(currentMatchTeamAId, currentMatchTeamBId);
     ball.x = 450; ball.y = 300; ball.vx = 0; ball.vy = 0;
     ball.cooldownPlayer = null; ball.cooldownTimer = 0;
     ball.trail = [];
@@ -136,20 +192,43 @@ function resetField() {
     activeLocks.red = { player: null, timer: 0 };
     activeLocks.blue = { player: null, timer: 0 };
     let outfielders = players.filter(p => !p.isGk);
-    if (nextKickoffTeam) outfielders = outfielders.filter(p => p.team === nextKickoffTeam);
+    if (nextKickoffTeam) {
+        outfielders = outfielders.filter(p => p.team === nextKickoffTeam);
+    }
     ball.owner = outfielders[Math.floor(Math.random() * outfielders.length)];
 }
 
-// ---------- UPDATE ----------
+function startTournamentMatch(match) {
+    if (!match) return;
+    tournamentPendingMatch = match;
+    const teamA = match.teamA;
+    const teamB = match.teamB;
+    const playerTeamId = tournamentSelectedTeam;
+    let redTeamId, blueTeamId;
+    if (teamA.id === playerTeamId) {
+        redTeamId = teamA.id;
+        blueTeamId = teamB.id;
+    } else if (teamB.id === playerTeamId) {
+        redTeamId = teamB.id;
+        blueTeamId = teamA.id;
+    } else {
+        redTeamId = teamA.id;
+        blueTeamId = teamB.id;
+    }
+    gameMode = 'pve';
+    currentState = 'PLAY';
+    initMatch(redTeamId, blueTeamId);
+    updateTouchUI();
+    SoundManager.updateMusicForState(currentState);
+}
+
 function update(dt) {
     if (currentState === 'PAUSED') return;
-    const ai = getAIConfig();
-
-    // Particles
+   
+    const ai = getAIConfigByDifficulty(difficulty);
+   
     updateParticles();
     updateCelebration();
-
-    // Screen shake
     if (screenShake.duration > 0) {
         screenShake.duration--;
         let damp = screenShake.duration / 32;
@@ -158,8 +237,42 @@ function update(dt) {
     } else { screenShake.x = 0; screenShake.y = 0; }
     if (goalZoomScale > 1.0) goalZoomScale += (1.0 - goalZoomScale)*0.16;
 
-    // State checks
+    // Handle tournament match end - FIXED: NO RED/BLUE MIXING!
+if (currentState === 'MATCH_END' && tournamentMode) {
+    if (tournamentPendingMatch) {
+        const isGroup = tournamentPendingMatch.type === 'group';
+        const matchId = tournamentPendingMatch.id;
+        const groupId = tournamentPendingMatch.groupId || null;
+        
+        const playerTeamId = tournamentSelectedTeam;
+        const teamAId = tournamentPendingMatch.teamA.id;
+        const teamBId = tournamentPendingMatch.teamB.id;
+        
+        let teamAScore, teamBScore;
+        if (playerTeamId === teamAId) {
+            teamAScore = score.red;
+            teamBScore = score.blue;
+        } else {
+            teamAScore = score.blue;
+            teamBScore = score.red;
+        }
+        
+        TournamentManager.recordPlayerMatchResult(
+            matchId,
+            teamAScore,
+            teamBScore,
+            isGroup,
+            groupId
+        );
+        
+        tournamentPendingMatch = null;
+        currentState = 'TOURNAMENT_RESULT';
+        SoundManager.updateMusicForState(currentState);
+    }
+    return;
+}
     if (currentState === 'MATCH_END') return;
+
     if (matchState === 'HALFTIME') {
         halftimeTimer -= dt;
         if (halftimeTimer <= 0) {
@@ -174,6 +287,7 @@ function update(dt) {
         }
         return;
     }
+
     if (currentState === 'GOAL_SCORED') {
         goalBannerTimer += dt * 60;
         if (goalBannerTimer > 110) {
@@ -185,15 +299,14 @@ function update(dt) {
         }
         return;
     }
+
     if (currentState !== 'PLAY') return;
 
-    // Match clock
     if (kickoffDelay > 0) {
         if (kickoffDelay < 0.1 && kickoffDelay > 0) SoundManager.playSFX('whistleStart', 0.7);
         kickoffDelay -= dt;
     } else {
         matchClock -= dt;
-        matchTimeProgress = 1 - (matchClock / halfDuration);
         if (matchClock <= 0) {
             matchClock = 0;
             if (currentHalf === 1) {
@@ -205,22 +318,33 @@ function update(dt) {
                 SoundManager.playSFX('whistleStop', 0.7);
                 const isVSComputer = gameMode === 'pve';
                 const winner = (score.red > score.blue) ? 'RED' : (score.blue > score.red) ? 'BLUE' : 'DRAW';
+               
+                if (isVSComputer && !tournamentMode) {
+                    updateOverallStats(difficulty, winner);
+                }
+               
                 if (isVSComputer) {
                     if (winner === 'RED') SoundManager.playMusic('victory');
                     else SoundManager.playMusic('defeat');
                 } else SoundManager.playMusic('victory');
+               
                 matchState = 'MATCH_END';
                 currentState = 'MATCH_END';
+               
                 let winnerText = '';
-                if (score.red > score.blue) winnerText = '🏆 RED TEAM WINS!';
-                else if (score.blue > score.red) winnerText = '🏆 BLUE TEAM WINS!';
-                else winnerText = '🤝 DRAW!';
+                if (tournamentMode) {
+                    winnerText = `⚽ ${score.red} - ${score.blue}`;
+                } else {
+                    if (score.red > score.blue) winnerText = '🏆 RED TEAM WINS!';
+                    else if (score.blue > score.red) winnerText = '🏆 BLUE TEAM WINS!';
+                    else winnerText = '🤝 DRAW!';
+                }
                 lastScorer = winnerText;
-                // Update rank
-                if (winner === 'RED') {
+               
+                if (winner === 'RED' && !tournamentMode) {
                     matchStats.winStreak++;
                     rankPoints += 10;
-                } else if (winner === 'BLUE') {
+                } else if (winner === 'BLUE' && !tournamentMode) {
                     matchStats.winStreak = 0;
                     rankPoints = Math.max(0, rankPoints - 5);
                 } else {
@@ -228,8 +352,6 @@ function update(dt) {
                 }
                 matchStats.totalMatches++;
                 updateRank();
-                document.getElementById('quickRematch').style.display = 'block';
-                isQuickRematchVisible = true;
                 return;
             }
         }
@@ -247,14 +369,10 @@ function update(dt) {
             if (dist < 5) { p.x = p.ejectTargetX; p.y = p.ejectTargetY; p.ejecting = false; }
             else { let speed = 5 + dist*0.05; if (speed>8) speed=8; p.x += (dx/dist)*speed; p.y += (dy/dist)*speed; }
         }
-        // Stamina recovery
         if (!keys.Shift) p.stamina = Math.min(1, p.stamina + 0.002);
     }
 
-    // Ball cooldown
     if (ball.cooldownTimer > 0) { ball.cooldownTimer--; if (ball.cooldownTimer <= 0) ball.cooldownPlayer = null; }
-
-    // AI timers
     if (aiStartDelay > 0) aiStartDelay--;
     if (aiReactionTimer > 0) aiReactionTimer--;
     if (aiPassCooldown > 0) aiPassCooldown--;
@@ -276,15 +394,12 @@ function update(dt) {
         }
     }
 
-    // Active players
     let activeRed = getActivePlayer('red');
     let activeBlue = getActivePlayer('blue');
     let playerSpeed = 4.5;
-
     let redGkHasBall = ball.owner && ball.owner.team === 'red' && ball.owner.isGk;
     let blueGkHasBall = ball.owner && ball.owner.team === 'blue' && ball.owner.isGk;
 
-    // Human (Red) control with sprint
     if (activeRed && !activeRed.ejecting) {
         let nextX = activeRed.x, nextY = activeRed.y;
         let speed = playerSpeed * (0.7 + 0.3 * activeRed.stamina);
@@ -304,7 +419,6 @@ function update(dt) {
         }
     }
 
-    // AI (Blue) control
     if (activeBlue && !activeBlue.ejecting) {
         let nextX = activeBlue.x, nextY = activeBlue.y;
         if (gameMode === '1v1') {
@@ -316,7 +430,7 @@ function update(dt) {
             if (keys.ArrowRight) nextX += speed;
         } else {
             if (aiReactionTimer <= 0 && aiStartDelay <= 0) {
-                let aiCfg = getAIConfig();
+                let aiCfg = getAIConfigByDifficulty(difficulty);
                 let aiSpeed = playerSpeed * aiCfg.speedMultiplier * (0.7 + 0.3 * activeBlue.stamina);
                 if (ball.owner === activeBlue) {
                     aiHoldBallTimer++;
@@ -407,14 +521,11 @@ function update(dt) {
         }
     }
 
-    // ---------- BALL PHYSICS ----------
     if (ball.owner) {
         ball.x = ball.owner.x;
         ball.y = ball.owner.y;
-        // Update possession timer
         if (ball.owner.team === 'red') matchStats.possessionTimer.red += dt;
         else matchStats.possessionTimer.blue += dt;
-
         if (ball.owner.isGk) {
             gkTimer--;
             let gk = ball.owner;
@@ -432,45 +543,25 @@ function update(dt) {
             }
         } else {
             if (!(gameMode === 'pve' && ball.owner.team === 'blue')) arrowAngle += 0.08;
-            // Shot charging
             if (ball.owner.team === 'red' && keys.space) {
-                if (!isChargingShot) { isChargingShot = true; shootPower = 0; }
-                shootPower = Math.min(1, shootPower + dt * 2);
-            } else if (ball.owner.team === 'red' && !keys.space && isChargingShot) {
-                // Release shot with power
-                let power = 0.7 + 0.3 * shootPower;
-                ball.speed = 13 * power;
                 shootBall(ball.owner);
                 keys.space = false;
-                isChargingShot = false;
-                shootPower = 0;
             } else if (ball.owner.team === 'blue' && gameMode === '1v1' && keys.enter) {
-                if (!isChargingShot) { isChargingShot = true; shootPower = 0; }
-                shootPower = Math.min(1, shootPower + dt * 2);
-            } else if (ball.owner.team === 'blue' && gameMode === '1v1' && !keys.enter && isChargingShot) {
-                let power = 0.7 + 0.3 * shootPower;
-                ball.speed = 13 * power;
                 shootBall(ball.owner);
                 keys.enter = false;
-                isChargingShot = false;
-                shootPower = 0;
             }
         }
     } else {
-        // Ball loose – physics
         ball.x += ball.vx;
         ball.y += ball.vy;
         ball.vx *= 0.985;
         ball.vy *= 0.985;
-
-        // Ball trail
         if (Math.hypot(ball.vx, ball.vy) > 2) {
-            ball.trail.push({x: ball.x, y: ball.y, life: 20});
-            if (ball.trail.length > 30) ball.trail.shift();
+            ball.trail.push({x: ball.x, y: ball.y, life: 15});
+            if (ball.trail.length > 20) ball.trail.shift();
         }
+        ball.trail = ball.trail.filter(t => t.life > 0);
         for (let t of ball.trail) t.life--;
-
-        // Particles
         if (Math.hypot(ball.vx, ball.vy) > 6 && Math.random() < 0.4) {
             particles.push({
                 x: ball.x, y: ball.y,
@@ -481,8 +572,6 @@ function update(dt) {
                 rotation:0, vRot:0, life:15
             });
         }
-
-        // Collisions with posts
         for (let post of posts) {
             let dist = Math.hypot(ball.x - post.x, ball.y - post.y);
             if (dist < ball.radius + post.radius) {
@@ -496,19 +585,29 @@ function update(dt) {
                 SoundManager.playSFX('kick', 0.3);
             }
         }
-
-        // Walls
         if (ball.y <= ball.radius) { ball.y = ball.radius; ball.vy *= -1; }
         else if (ball.y >= canvas.height - ball.radius) { ball.y = canvas.height - ball.radius; ball.vy *= -1; }
 
-        // Goal detection
         if (ball.x - ball.radius <= 25) {
             if (ball.y >= 200 && ball.y <= 400) {
                 if (ball.y - ball.radius <= 200) { ball.y = 200 + ball.radius; ball.vy *= -1; }
                 else if (ball.y + ball.radius >= 400) { ball.y = 400 - ball.radius; ball.vy *= -1; }
                 if (ball.x - ball.radius <= 5) {
                     score.blue++;
-                    triggerGoal('BLUE TEAM SCORES!', 'red', 25, ball.y);
+                    let scorerName = 'BLUE TEAM SCORES!';
+                    if (tournamentMode && tournamentPendingMatch) {
+                        const match = tournamentPendingMatch;
+                        const teamA = match.teamA;
+                        const teamB = match.teamB;
+                        const playerTeamId = tournamentSelectedTeam;
+                        if (teamA && teamB) {
+                            let blueTeam = (teamB.id === playerTeamId) ? teamB : teamA;
+                            if (teamA.id === playerTeamId) blueTeam = teamB;
+                            else if (teamB.id === playerTeamId) blueTeam = teamA;
+                            scorerName = blueTeam.flag + ' ' + blueTeam.name + ' SCORES!';
+                        }
+                    }
+                    triggerGoal(scorerName, 'red', 25, ball.y);
                     currentState = 'GOAL_SCORED';
                     goalBannerTimer = 0;
                     return;
@@ -521,7 +620,20 @@ function update(dt) {
                 else if (ball.y + ball.radius >= 400) { ball.y = 400 - ball.radius; ball.vy *= -1; }
                 if (ball.x + ball.radius >= 895) {
                     score.red++;
-                    triggerGoal('RED TEAM SCORES!', 'blue', 875, ball.y);
+                    let scorerName = 'RED TEAM SCORES!';
+                    if (tournamentMode && tournamentPendingMatch) {
+                        const match = tournamentPendingMatch;
+                        const teamA = match.teamA;
+                        const teamB = match.teamB;
+                        const playerTeamId = tournamentSelectedTeam;
+                        if (teamA && teamB) {
+                            let redTeam = (teamA.id === playerTeamId) ? teamA : teamB;
+                            if (teamA.id === playerTeamId) redTeam = teamA;
+                            else if (teamB.id === playerTeamId) redTeam = teamB;
+                            scorerName = redTeam.flag + ' ' + redTeam.name + ' SCORES!';
+                        }
+                    }
+                    triggerGoal(scorerName, 'blue', 875, ball.y);
                     currentState = 'GOAL_SCORED';
                     goalBannerTimer = 0;
                     return;
@@ -529,18 +641,20 @@ function update(dt) {
             } else { ball.x = 875 - ball.radius; ball.vx *= -1; }
         }
 
-        // Player collision
         for (let p of players) {
             if (p.ejecting || ball.cooldownPlayer === p) continue;
             let dist = Math.hypot(p.x - ball.x, p.y - ball.y);
             if (dist < p.radius + ball.radius) {
-                window._gkStealInProgress = p.isGk && ball.cooldownPlayer && ball.cooldownPlayer.team !== p.team;
+                const prevOwner = ball.cooldownPlayer;
+                const isPass = prevOwner && prevOwner !== p && prevOwner.team === p.team;
+                window._gkStealInProgress = p.isGk && prevOwner && prevOwner.team !== p.team;
                 ball.owner = p;
                 ball.vx = 0; ball.vy = 0;
+                ball.trail = [];
                 if (p.isGk) {
                     gkTimer = 360;
-                    if (ball.cooldownPlayer && ball.cooldownPlayer.team !== p.team) {
-                        let shooter = ball.cooldownPlayer;
+                    if (prevOwner && prevOwner.team !== p.team) {
+                        let shooter = prevOwner;
                         let target = null;
                         if (p.team === 'blue' && shooter.x > 775 && shooter.y > 150 && shooter.y < 450) {
                             target = getEjectTarget(shooter, {minX:775, maxX:875, minY:150, maxY:450});
@@ -548,16 +662,21 @@ function update(dt) {
                             target = getEjectTarget(shooter, {minX:25, maxX:125, minY:150, maxY:450});
                         }
                         if (target) { shooter.ejecting = true; shooter.ejectTargetX = target.x; shooter.ejectTargetY = target.y; }
+                        if (p.team === 'red') matchStats.gkSaves.red++;
+                        else matchStats.gkSaves.blue++;
                     }
+                } else {
+                    if (isPass && p.team === 'red') { matchStats.passes.red++; }
+                    else if (isPass && p.team === 'blue') { matchStats.passes.blue++; }
                 }
                 if (!(gameMode === 'pve' && p.team === 'blue')) arrowAngle = 0;
+                ball.cooldownPlayer = null;
                 setTimeout(() => { window._gkStealInProgress = false; }, 50);
                 break;
             }
         }
     }
 
-    // GK steal from outfield
     if (ball.owner && !ball.owner.isGk) {
         let gkClaimed = false;
         let opponentGk = players.find(p => p.isGk && p.team !== ball.owner.team);
@@ -568,6 +687,7 @@ function update(dt) {
                 let offender = ball.owner;
                 ball.owner = opponentGk;
                 gkTimer = 360;
+                ball.trail = [];
                 let target = null;
                 if (opponentGk.team === 'blue') target = getEjectTarget(offender, {minX:775, maxX:875, minY:150, maxY:450});
                 else target = getEjectTarget(offender, {minX:25, maxX:125, minY:150, maxY:450});
@@ -575,6 +695,8 @@ function update(dt) {
                 offender.ejectTargetX = target.x;
                 offender.ejectTargetY = target.y;
                 gkClaimed = true;
+                if (opponentGk.team === 'red') matchStats.gkSaves.red++;
+                else matchStats.gkSaves.blue++;
                 setTimeout(() => { window._gkStealInProgress = false; }, 50);
             }
         }
@@ -598,62 +720,27 @@ function update(dt) {
         }
     }
 
-    // Update match stats (possession)
     const totalTime = matchStats.possessionTimer.red + matchStats.possessionTimer.blue;
     if (totalTime > 0) {
         matchStats.possession.red = matchStats.possessionTimer.red / totalTime;
         matchStats.possession.blue = matchStats.possessionTimer.blue / totalTime;
     }
-
-    // Passes tracking (simplified)
-    if (ball.owner && ball.cooldownPlayer && ball.cooldownPlayer !== ball.owner) {
-        // A pass happened
-        if (ball.owner.team === 'red') matchStats.passes.red++;
-        else matchStats.passes.blue++;
-    }
-
-    // Update DOM stats
-    updateStatsUI();
 }
 
-// ---------- STATS UI ----------
-function updateStatsUI() {
-    const poss = document.getElementById('possessionStat');
-    if (poss) poss.textContent = Math.round(matchStats.possession.red * 100) + '%';
-    const shots = document.getElementById('shotsStat');
-    if (shots) shots.textContent = matchStats.shots.red + '-' + matchStats.shots.blue;
-    const passes = document.getElementById('passesStat');
-    if (passes) passes.textContent = matchStats.passes.red + matchStats.passes.blue;
-    const rank = document.getElementById('rankStat');
-    if (rank) rank.textContent = currentRank;
-}
-
-// ---------- RANK ----------
-function updateRank() {
-    const thresholds = [0, 50, 150, 300, 500];
-    let newRank = 'Bronze';
-    for (let i = ranks.length - 1; i >= 0; i--) {
-        if (rankPoints >= thresholds[i]) { newRank = ranks[i]; break; }
-    }
-    currentRank = newRank;
-}
-
-// ---------- SHOOT ----------
 function shootBall(passer) {
     if (!window._gkStealInProgress) SoundManager.playSFX('kick', 0.8);
     const spawnDist = passer.radius + ball.radius + 6;
     ball.x = passer.x + Math.cos(arrowAngle) * spawnDist;
     ball.y = passer.y + Math.sin(arrowAngle) * spawnDist;
-    const power = ball.speed || 13;
+    const power = 13;
     ball.vx = Math.cos(arrowAngle) * power;
     ball.vy = Math.sin(arrowAngle) * power;
     ball.cooldownPlayer = passer;
     ball.cooldownTimer = 20;
     ball.owner = null;
+    ball.trail = [];
     if (passer.isGk) gkTimer = 0;
     aiReactionTimer = 20;
-    // Reset power
-    ball.speed = 13;
 }
 
 function doAiGkPass(gk) {
@@ -666,19 +753,46 @@ function doAiGkPass(gk) {
     shootBall(gk);
 }
 
-// ---------- QUICK REMATCH ----------
-quickRematchBtn.addEventListener('click', () => {
-    if (currentState === 'MATCH_END') {
-        SoundManager.playSFX('menuClick', 0.5);
-        initMatch();
-        currentState = 'PLAY';
-        SoundManager.updateMusicForState(currentState);
-        document.getElementById('quickRematch').style.display = 'none';
-        isQuickRematchVisible = false;
+function updateOverallStats(diff, winner) {
+    const stats = overallStats[diff];
+    if (!stats) return;
+    stats.matches++;
+    const playerGoals = (winner === 'RED') ? score.red : score.blue;
+    const opponentGoals = (winner === 'RED') ? score.blue : score.red;
+    stats.goalsScored += playerGoals;
+    stats.goalsConceded += opponentGoals;
+    const goalDiff = playerGoals - opponentGoals;
+    if (winner === 'RED') {
+        if (goalDiff > stats.bestWinDiff || (goalDiff === stats.bestWinDiff && playerGoals > stats.bestWinGoals)) {
+            stats.bestWinDiff = goalDiff;
+            stats.bestWinScore = `${playerGoals} - ${opponentGoals}`;
+            stats.bestWinGoals = playerGoals;
+        }
     }
-});
+    if (winner === 'BLUE') {
+        if (goalDiff < stats.worstDefeatDiff || (goalDiff === stats.worstDefeatDiff && opponentGoals > stats.worstDefeatGoalsConceded)) {
+            stats.worstDefeatDiff = goalDiff;
+            stats.worstDefeatScore = `${playerGoals} - ${opponentGoals}`;
+            stats.worstDefeatGoalsConceded = opponentGoals;
+        }
+    }
+    const poss = (winner === 'RED') ? matchStats.possession.red : matchStats.possession.blue;
+    stats.possessionTotal += poss;
+    const passes = (winner === 'RED') ? matchStats.passes.red : matchStats.passes.blue;
+    stats.passesTotal += passes;
+    const oppGkSaves = (winner === 'RED') ? matchStats.gkSaves.blue : matchStats.gkSaves.red;
+    stats.gkSavesTotal += oppGkSaves;
+}
 
-// ---------- GAME LOOP ----------
+function updateRank() {
+    const thresholds = [0, 50, 150, 300, 500];
+    let newRank = 'Bronze';
+    for (let i = ranks.length - 1; i >= 0; i--) {
+        if (rankPoints >= thresholds[i]) { newRank = ranks[i]; break; }
+    }
+    currentRank = newRank;
+}
+
 let lastTime = 0;
 function gameLoop(timestamp) {
     let dt = (timestamp - lastTime) / 1000;
@@ -689,10 +803,11 @@ function gameLoop(timestamp) {
     requestAnimationFrame(gameLoop);
 }
 
-// ---------- BOOTSTRAP ----------
 function bootstrap() {
     if (gameRunning) return;
     try {
+        console.log('[ProStriker] Bootstrapping...');
+        initSoundOnInteraction();
         const depsReady = typeof initMatch === 'function' && typeof updateTouchUI === 'function';
         if (!depsReady) { setTimeout(bootstrap, 50); return; }
         initMatch();
@@ -700,10 +815,12 @@ function bootstrap() {
         lastTime = performance.now();
         requestAnimationFrame(gameLoop);
         gameRunning = true;
-        console.log('Pro Striker ULTIMATE EDITION loaded!');
-    } catch(e) { console.error(e); }
+        console.log('[ProStriker] Pro Striker ULTIMATE EDITION loaded!');
+    } catch(e) { console.error('[ProStriker] Bootstrap error:', e); }
 }
+
 window.bootstrap = bootstrap;
+
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
     setTimeout(() => { if (typeof window.bootstrap === 'function') window.bootstrap(); }, 0);
 } else {
