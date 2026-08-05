@@ -1,4 +1,24 @@
-console.log('[ProStrker] globals.js loaded');
+// ===== PRO STRIKER - globals.js =====
+const TOURNAMENT_STATES = {
+    MENU: 'TOURNAMENT_MENU',
+    TEAM_SELECT: 'TOURNAMENT_TEAM_SELECT',
+    GROUP_DRAW: 'TOURNAMENT_GROUP_DRAW',
+    GROUP_STAGE: 'TOURNAMENT_GROUP_STAGE',
+    MATCH_PREVIEW: 'TOURNAMENT_MATCH_PREVIEW',
+    MATCH_RESULT: 'TOURNAMENT_MATCH_RESULT',
+    KNOCKOUT_BRACKET: 'TOURNAMENT_BRACKET',
+    CHAMPION: 'TOURNAMENT_CHAMPION'
+};
+
+let tournamentMode = false;
+let tournamentState = 'TOURNAMENT_MENU';
+let tournamentFormat = 32;
+let tournamentSelectedTeam = null;
+let tournamentPendingMatch = null;
+let currentMatchTeamAId = null;
+let currentMatchTeamBId = null;
+
+console.log('[ProStriker] globals.js loaded');
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -6,12 +26,9 @@ const touchControlsElem = document.getElementById('touchControls');
 const gameWrapperElem = document.getElementById('gameWrapper');
 const goalFlashElem = document.getElementById('goalFlash');
 const celebrationOverlay = document.getElementById('celebrationOverlay');
-const matchStatsElem = document.getElementById('matchStats');
-const quickRematchBtn = document.getElementById('quickRematch');
 
 const isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-// GAME STATES
 let currentState = 'MENU';
 let gameMode = '1v1';
 let difficulty = 'EASY';
@@ -26,21 +43,27 @@ let kickoffTeam = 'red';
 let nextKickoffTeam = null;
 let kickoffDelay = 0.5;
 
-// MATCH STATS & RANK
 let matchStats = {
     possession: { red: 0, blue: 0 },
     shots: { red: 0, blue: 0 },
     passes: { red: 0, blue: 0 },
     tackles: { red: 0, blue: 0 },
     possessionTimer: { red: 0, blue: 0 },
+    gkSaves: { red: 0, blue: 0 },
     winStreak: 0,
     totalMatches: 0
 };
+
+let overallStats = {
+    EASY:   { matches: 0, goalsScored: 0, goalsConceded: 0, bestWinDiff: -Infinity, bestWinScore: '---', bestWinGoals: 0, worstDefeatDiff: Infinity, worstDefeatScore: '---', worstDefeatGoalsConceded: 0, possessionTotal: 0, passesTotal: 0, gkSavesTotal: 0 },
+    MEDIUM: { matches: 0, goalsScored: 0, goalsConceded: 0, bestWinDiff: -Infinity, bestWinScore: '---', bestWinGoals: 0, worstDefeatDiff: Infinity, worstDefeatScore: '---', worstDefeatGoalsConceded: 0, possessionTotal: 0, passesTotal: 0, gkSavesTotal: 0 },
+    HARD:   { matches: 0, goalsScored: 0, goalsConceded: 0, bestWinDiff: -Infinity, bestWinScore: '---', bestWinGoals: 0, worstDefeatDiff: Infinity, worstDefeatScore: '---', worstDefeatGoalsConceded: 0, possessionTotal: 0, passesTotal: 0, gkSavesTotal: 0 }
+};
+
 let currentRank = 'Bronze';
 const ranks = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond'];
 let rankPoints = 0;
 
-// BALL
 let ball = {
     x: 450, y: 300, radius: 9,
     vx: 0, vy: 0,
@@ -48,13 +71,11 @@ let ball = {
     speed: 13,
     cooldownPlayer: null,
     cooldownTimer: 0,
-    trail: []  // for comet effect
+    trail: []
 };
 
 let players = [];
 let arrowAngle = 0;
-let shootPower = 0;        // 0..1 charge
-let isChargingShot = false;
 let gkSpeed = 2.5;
 let gkDirection = { red: 1, blue: -1 };
 let goalBannerTimer = 0;
@@ -63,9 +84,7 @@ let particles = [];
 let celebrationParticles = [];
 let screenShake = { duration: 0, intensity: 0, x: 0, y: 0 };
 let goalZoomScale = 1.0;
-let matchTimeProgress = 0;
 
-// MENU BG
 let menuBgParticles = [];
 for (let i = 0; i < 40; i++) {
     menuBgParticles.push({
@@ -78,7 +97,6 @@ for (let i = 0; i < 40; i++) {
     });
 }
 
-// AI
 let aiTimer = 0;
 let aiReactionTimer = 20;
 let aiStartDelay = 60;
@@ -106,7 +124,6 @@ const posts = [
 ];
 
 let pauseButton = { x: 860, y: 15, width: 30, height: 30, hover: false };
-
 const keys = {
     w: false, a: false, s: false, d: false, space: false,
     ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false, enter: false,
@@ -114,9 +131,7 @@ const keys = {
 };
 
 let isDraggingSlider = false;
-let isQuickRematchVisible = false;
 
-// Polyfill
 if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
     CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
         if (typeof r === 'undefined') r = 6;
