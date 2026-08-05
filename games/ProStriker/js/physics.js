@@ -1,5 +1,5 @@
-// Physics & helpers
-console.log('[ProStrker] physics.js loaded');
+// ===== PRO STRIKER - physics.js =====
+console.log('[ProStriker] physics.js loaded');
 
 function spawnGoalConfetti(originX, originY, primaryColor = '#f1c40f') {
     particles = [];
@@ -38,7 +38,6 @@ function drawStar(cx, cy, spikes, outerRadius, innerRadius) {
     let rot = Math.PI / 2 * 3;
     let x = cx, y = cy;
     let step = Math.PI / spikes;
-
     ctx.beginPath();
     ctx.moveTo(cx, cy - outerRadius);
     for (let i = 0; i < spikes; i++) {
@@ -46,7 +45,6 @@ function drawStar(cx, cy, spikes, outerRadius, innerRadius) {
         y = cy + Math.sin(rot) * outerRadius;
         ctx.lineTo(x, y);
         rot += step;
-
         x = cx + Math.cos(rot) * innerRadius;
         y = cy + Math.sin(rot) * innerRadius;
         ctx.lineTo(x, y);
@@ -60,22 +58,17 @@ function drawStar(cx, cy, spikes, outerRadius, innerRadius) {
 
 function getActivePlayer(team) {
     if (ball.owner && ball.owner.team === team) return ball.owner;
-
     let lock = activeLocks[team];
     if (lock.timer > 0 && lock.player && !lock.player.ejecting) return lock.player;
-
     let eligible = players.filter(p => p.team === team && !p.isGk && !p.ejecting);
     if (eligible.length === 0) return null;
-
     let candidates = eligible.map(p => {
         return { player: p, dist: Math.hypot(p.x - ball.x, p.y - ball.y) };
     });
     candidates.sort((a,b) => a.dist - b.dist);
-
     let chosen = candidates[0].player;
     let threshold = 25;
     let equidistantGroup = candidates.filter(c => c.dist - candidates[0].dist <= threshold);
-
     if (equidistantGroup.length >= 2) {
         let randomIndex = Math.floor(Math.random() * equidistantGroup.length);
         chosen = equidistantGroup[randomIndex].player;
@@ -88,40 +81,12 @@ function getActivePlayer(team) {
     return chosen;
 }
 
-function shootBall(passer) {
-    if (!window._gkStealInProgress) SoundManager.playSFX('kick', 0.8);
-
-    let spawnDistance = passer.radius + ball.radius + 6;
-    ball.x = passer.x + Math.cos(arrowAngle) * spawnDistance;
-    ball.y = passer.y + Math.sin(arrowAngle) * spawnDistance;
-    ball.vx = Math.cos(arrowAngle) * ball.speed;
-    ball.vy = Math.sin(arrowAngle) * ball.speed;
-    ball.cooldownPlayer = passer;
-    ball.cooldownTimer = 20;
-    ball.owner = null;
-    if (passer.isGk) gkTimer = 0;
-    aiReactionTimer = 20;
-}
-
-function doAiGkPass(gk) {
-    if (Math.random() < 0.50) {
-        let teammates = players.filter(p => p.team === gk.team && !p.isGk);
-        let target = teammates[Math.floor(Math.random() * teammates.length)];
-        if (target) { arrowAngle = Math.atan2(target.y - gk.y, target.x - gk.x); }
-        else { arrowAngle = Math.atan2((Math.random() - 0.5), -1); }
-    } else {
-        arrowAngle = Math.atan2((Math.random() - 0.5), -1);
-    }
-    shootBall(gk);
-}
-
 function resolveBoxCollision(player, box) {
     let closestX = Math.max(box.minX, Math.min(player.x, box.maxX));
     let closestY = Math.max(box.minY, Math.min(player.y, box.maxY));
     let dx = player.x - closestX;
     let dy = player.y - closestY;
     let distance = Math.hypot(dx, dy);
-
     if (distance < player.radius) {
         if (distance === 0) {
             let dLeft = Math.abs(player.x - box.minX);
@@ -149,7 +114,6 @@ function getEjectTarget(player, box) {
     let min = Math.min(dLeft, dRight, dTop, dBottom);
     let targetX = player.x;
     let targetY = player.y;
-
     if (min === dLeft) targetX = box.minX - player.radius - 5;
     else if (min === dRight) targetX = box.maxX + player.radius + 5;
     else if (min === dTop) targetY = box.minY - player.radius - 5;
@@ -158,9 +122,7 @@ function getEjectTarget(player, box) {
     const PADDING = 25;
     targetX = Math.max(PADDING + player.radius, Math.min(875 - player.radius, targetX));
     targetY = Math.max(PADDING + player.radius, Math.min(580 - player.radius, targetY));
-
     if (box.maxX === 125) targetX = Math.max(130, targetX);
     if (box.minX === 775) targetX = Math.min(770, targetX);
-
     return { x: targetX, y: targetY };
 }
