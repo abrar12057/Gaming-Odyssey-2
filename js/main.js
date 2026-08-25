@@ -260,6 +260,14 @@ function update(dt) {
 
         tournamentPendingMatch = null;
         currentState = 'TOURNAMENT_RESULT';
+        // BUGFIX: this transition out of PLAY happens inside the game loop
+        // (update()), not from an input.js click/key handler, so it never
+        // used to call updateTouchUI(). That left the joystick/shoot touch
+        // controls from the just-finished match visibly stuck on screen
+        // over the tournament result screen. Every other state exit already
+        // goes through a handler that calls updateTouchUI() — this was the
+        // one gap.
+        updateTouchUI();
         SoundManager.updateMusicForState(currentState);
         return;
     }
@@ -306,6 +314,10 @@ function update(dt) {
                 SoundManager.playSFX('whistleStop', 0.7);
                 matchState = 'HALFTIME';
                 halftimeTimer = HALFTIME_BREAK;
+                // BUGFIX: same class of bug as MATCH_END/TOURNAMENT_RESULT above —
+                // reached from inside the game loop, so the touch controls never
+                // got hidden for the halftime break without this.
+                updateTouchUI();
                 return;
             } else {
                 // ===== FULL TIME =====
@@ -365,6 +377,12 @@ if (isVSComputer || tournamentMode) {
                
                 matchState = 'MATCH_END';
                 currentState = 'MATCH_END';
+                // BUGFIX: same issue as the TOURNAMENT_RESULT transition above —
+                // full-time is reached inside the game loop, so without this call
+                // the touch joystick/shoot buttons from the match stayed visible
+                // on top of the match-end screen until some unrelated tap/key
+                // happened to trigger updateTouchUI() elsewhere.
+                updateTouchUI();
                
                 let winnerText = '';
                 if (tournamentMode) {
@@ -863,6 +881,13 @@ function gameLoop(timestamp) {
     lastTime = timestamp;
     update(dt);
     draw();
+    // Cheap per-frame safety net: guarantees the joystick/shoot controls can
+    // never stay stuck on screen for more than one frame after leaving a
+    // match, even if some future code path forgets to call updateTouchUI()
+    // after changing currentState (see updateTouchUI in input.js for the
+    // full explanation — this was exactly the "buttons stuck after a vs-
+    // Computer match" bug).
+    if (typeof syncTouchControlsVisibility === 'function') syncTouchControlsVisibility();
     requestAnimationFrame(gameLoop);
 }
 
