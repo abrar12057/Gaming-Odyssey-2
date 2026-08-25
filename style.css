@@ -97,7 +97,10 @@ canvas { display: block; width: 100%; height: 100%; background: #1a1a2e; image-r
 .celebration-overlay.active { opacity:1; }
 
 .touch-controls {
-    position: absolute; top:0; left:0; width:100%; height:100%;
+    /* Fixed to the real viewport (not absolute-within-gameWrapper) — see the
+       comment on this element in index.html for why: it needs to reach the
+       true screen edges even when the 3:2 game box is letterboxed. */
+    position: fixed; top:0; left:0; width:100vw; height:100vh;
     pointer-events: none; display: none; z-index:20;
 }
 .touch-controls.is-active { display:block !important; }
