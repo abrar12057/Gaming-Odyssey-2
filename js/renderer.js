@@ -460,10 +460,12 @@ function drawMatchBall(b) {
 // ============================================================
 function drawGoalNet(side) {
     // side: 'left' or 'right'. Net sits just outside the pitch boundary,
-    // spanning the goal mouth (y 150–450 outer box → visually 170–430).
+    // spanning the goal mouth between the actual posts (posts sit at
+    // y=200/y=400 with radius 7 — the net now matches that span exactly
+    // instead of overshooting past the post tops/bottoms).
     const x0 = side === 'left' ? 2 : 875;
     const x1 = side === 'left' ? 25 : 898;
-    const yTop = 165, yBot = 435;
+    const yTop = 200, yBot = 400;
     ctx.save();
     ctx.strokeStyle = 'rgba(255,255,255,0.22)';
     ctx.lineWidth = 1;
@@ -1758,23 +1760,39 @@ function drawGroupStage() {
         }
     } else if (nextMatch) {
         // Player has a match to play
+        // BUGFIX: this box was a fixed 400px wide with a fixed 18px font, so
+        // long matchups ("⚽ PLAY GROUP MATCH: South Korea vs Netherlands")
+        // rendered wider than the box itself and spilled out both sides —
+        // exactly what the screenshot showed. Now the box is wider (700px,
+        // still centered) and the font auto-shrinks (down to a floor of
+        // 13px) until the label actually fits inside it with some padding.
+        const btnX = 100, btnW = 700, btnY = 520, btnH = 50;
+        const matchInfo = nextMatch.type === 'group' ? 'GROUP MATCH' : 'KNOCKOUT';
+        const teamAName = nextMatch.teamA ? nextMatch.teamA.name : 'TBD';
+        const teamBName = nextMatch.teamB ? nextMatch.teamB.name : 'TBD';
+        const label = `⚽ PLAY ${matchInfo}: ${teamAName} vs ${teamBName}`;
+
         ctx.fillStyle = 'rgba(46, 204, 113, 0.2)';
         ctx.beginPath();
-        ctx.roundRect(250, 520, 400, 50, 14);
+        ctx.roundRect(btnX, btnY, btnW, btnH, 14);
         ctx.fill();
         ctx.strokeStyle = '#2ecc71';
         ctx.lineWidth = 2.5;
         ctx.stroke();
         ctx.fillStyle = '#2ecc71';
-        ctx.font = '700 18px Outfit, sans-serif';
         ctx.shadowColor = '#2ecc71';
         ctx.shadowBlur = 15;
-        const matchInfo = nextMatch.type === 'group' ? 'GROUP MATCH' : 'KNOCKOUT';
-        const teamAName = nextMatch.teamA ? nextMatch.teamA.name : 'TBD';
-        const teamBName = nextMatch.teamB ? nextMatch.teamB.name : 'TBD';
-        ctx.fillText(`⚽ PLAY ${matchInfo}: ${teamAName} vs ${teamBName}`, 450, 548);
+
+        const maxTextWidth = btnW - 40;
+        let fontSize = 18;
+        ctx.font = `700 ${fontSize}px Outfit, sans-serif`;
+        while (ctx.measureText(label).width > maxTextWidth && fontSize > 13) {
+            fontSize--;
+            ctx.font = `700 ${fontSize}px Outfit, sans-serif`;
+        }
+        ctx.fillText(label, btnX + btnW / 2, btnY + btnH / 2 + fontSize * 0.32);
         ctx.shadowBlur = 0;
-        window._tournamentPlayMatchBtn = { x: 250, y: 520, w: 400, h: 50 };
+        window._tournamentPlayMatchBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
     } else if (!groupStageComplete) {
         // Waiting for AI matches to finish
         ctx.fillStyle = 'rgba(255,255,255,0.05)';
@@ -1793,8 +1811,49 @@ function drawGroupStage() {
     // to tap something else. It's now a normal-sized button labeled
     // "EXIT TOURNAMENT" and input.js (see fix there) asks for confirmation
     // before it actually leaves.
-    drawPillButton(325, 570, 250, 28, '✕ EXIT TOURNAMENT', '#9b59b6', { fontSize: 13 });
-    window._tournamentGroupBackBtn = { x: 325, y: 570, w: 250, h: 28 };
+    // BUGFIX: moved to the top-right corner (as requested) instead of a
+    // bottom pill squeezed under the match button, and given a bit more
+    // width + a space in the label so "✕ EXIT TOURNAMENT" doesn't render
+    // clipped/cramped like it did before.
+    drawPillButton(720, 15, 165, 30, '✕ EXIT', '#9b59b6', { fontSize: 13 });
+    window._tournamentGroupBackBtn = { x: 720, y: 15, w: 165, h: 30 };
+
+    // BUGFIX: the exit-confirmation overlay used to only be drawn from a
+    // block near the bottom of draw()'s try body — but every tournament
+    // screen (this one included) does an early `return` right after its
+    // own drawXxx() call, so that shared block was unreachable dead code.
+    // Tapping "Exit" would set window._confirmExitTournament = true and
+    // then nothing would ever appear, so the Yes/No buttons never got
+    // positioned and taps did nothing. Drawing the overlay here — the one
+    // screen that can actually set the flag — makes it reachable again.
+    drawExitTournamentConfirmOverlay();
+
+    ctx.restore();
+}
+
+function drawExitTournamentConfirmOverlay() {
+    if (!window._confirmExitTournament) return;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(0, 0, GAME_W, GAME_H);
+
+    drawGlassPanel(250, 210, 400, 200, 22, 'rgba(231,76,60,0.4)');
+
+    ctx.textAlign = 'center';
+    drawGlowTitle('⚠️ EXIT TOURNAMENT?', 450, 265, '#e74c3c', 26);
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '600 14px Outfit, sans-serif';
+    ctx.fillText('Your progress in this tournament will be lost.', 450, 300);
+
+    drawPillButton(275, 330, 150, 45, 'STAY', '#2ecc71', { fontSize: 17 });
+    window._confirmExitNoBtn = { x: 275, y: 330, w: 150, h: 45 };
+
+    drawPillButton(475, 330, 150, 45, 'EXIT', '#e74c3c', { fontSize: 17 });
+    window._confirmExitYesBtn = { x: 475, y: 330, w: 150, h: 45 };
+
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '600 11px Outfit, sans-serif';
+    ctx.fillText('ESC to stay • ENTER to exit', 450, 392);
     ctx.restore();
 }
 
@@ -2096,21 +2155,32 @@ function drawTournamentBracket() {
     if (nextMatch && !isComplete && !isEliminated) {
         const teamAName = nextMatch.teamA ? nextMatch.teamA.name : 'TBD';
         const teamBName = nextMatch.teamB ? nextMatch.teamB.name : 'TBD';
-        
+        // BUGFIX: same auto-fit as the group-stage play button — a fixed
+        // 400px/18px combo could overflow for longer team names.
+        const btnX = 150, btnW = 600, btnH = 45;
+        const label = `⚽ PLAY: ${teamAName} vs ${teamBName}`;
+
         ctx.fillStyle = 'rgba(46, 204, 113, 0.25)';
         ctx.beginPath();
-        ctx.roundRect(250, buttonY, 400, 45, 14);
+        ctx.roundRect(btnX, buttonY, btnW, btnH, 14);
         ctx.fill();
         ctx.strokeStyle = '#2ecc71';
         ctx.lineWidth = 3;
         ctx.stroke();
         ctx.fillStyle = '#2ecc71';
-        ctx.font = '700 18px Outfit, sans-serif';
         ctx.shadowColor = '#2ecc71';
         ctx.shadowBlur = 20;
-        ctx.fillText(`⚽ PLAY: ${teamAName} vs ${teamBName}`, 450, buttonY + 30);
+
+        const maxTextWidth = btnW - 40;
+        let fontSize = 18;
+        ctx.font = `700 ${fontSize}px Outfit, sans-serif`;
+        while (ctx.measureText(label).width > maxTextWidth && fontSize > 13) {
+            fontSize--;
+            ctx.font = `700 ${fontSize}px Outfit, sans-serif`;
+        }
+        ctx.fillText(label, btnX + btnW / 2, buttonY + btnH / 2 + fontSize * 0.32);
         ctx.shadowBlur = 0;
-        window._tournamentPlayMatchBtn = { x: 250, y: buttonY, w: 400, h: 45 };
+        window._tournamentPlayMatchBtn = { x: btnX, y: buttonY, w: btnW, h: btnH };
     } else if (isComplete) {
         const champion = TournamentManager.champion;
         if (champion) {
@@ -3780,36 +3850,6 @@ if (currentState === 'MENU') {
             ctx.fillStyle = '#95a5a6';
             ctx.font = '600 18px Outfit, sans-serif';
             ctx.fillText('Press any key or tap to continue', 450, 380);
-            ctx.restore();
-        }
-
-        // ===== EXIT-TOURNAMENT CONFIRMATION OVERLAY =====
-        // Drawn last so it sits above whatever screen is currently active.
-        // Bugfix companion to the group-stage exit button: leaving a live
-        // tournament now requires a deliberate second tap instead of one
-        // accidental click on a tiny button.
-        if (window._confirmExitTournament) {
-            ctx.save();
-            ctx.fillStyle = 'rgba(0,0,0,0.72)';
-            ctx.fillRect(0, 0, GAME_W, GAME_H);
-
-            drawGlassPanel(250, 210, 400, 200, 22, 'rgba(231,76,60,0.4)');
-
-            ctx.textAlign = 'center';
-            drawGlowTitle('⚠️ EXIT TOURNAMENT?', 450, 265, '#e74c3c', 26);
-            ctx.fillStyle = 'rgba(255,255,255,0.7)';
-            ctx.font = '600 14px Outfit, sans-serif';
-            ctx.fillText('Your progress in this tournament will be lost.', 450, 300);
-
-            drawPillButton(275, 330, 150, 45, 'STAY', '#2ecc71', { fontSize: 17 });
-            window._confirmExitNoBtn = { x: 275, y: 330, w: 150, h: 45 };
-
-            drawPillButton(475, 330, 150, 45, 'EXIT', '#e74c3c', { fontSize: 17 });
-            window._confirmExitYesBtn = { x: 475, y: 330, w: 150, h: 45 };
-
-            ctx.fillStyle = 'rgba(255,255,255,0.3)';
-            ctx.font = '600 11px Outfit, sans-serif';
-            ctx.fillText('ESC to stay • ENTER to exit', 450, 392);
             ctx.restore();
         }
 
