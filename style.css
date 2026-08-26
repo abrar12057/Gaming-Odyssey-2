@@ -143,6 +143,7 @@ canvas { display: block; width: 100%; height: 100%; background: #1a1a2e; image-r
     border-radius: 50%;
     display: flex; justify-content: center; align-items: center;
     pointer-events: auto; touch-action: none;
+    -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
     box-shadow: 0 0 30px rgba(0,0,0,0.5);
     transition: all 0.3s ease;
@@ -150,10 +151,19 @@ canvas { display: block; width: 100%; height: 100%; background: #1a1a2e; image-r
 }
 .joystick-base:active { transform:scale(0.95); }
 .joystick-stick {
+    /* BUGFIX (iPhone): this used to be background-only at 60% opacity,
+       relying on the base's translucent glass (backdrop-filter blur) behind
+       it for contrast. backdrop-filter support/behavior is inconsistent
+       across iOS Safari versions and can render weaker or not at all in
+       some stacking contexts — when it does, this stick nearly disappears
+       against the base, which is exactly "I can't see the joystick move."
+       Added a solid border + shadow so the stick reads clearly by its own
+       outline regardless of what's rendering behind it, on any device. */
     width:38%; height:38%;
-    background: rgba(255,255,255,0.6);
+    background: rgba(255,255,255,0.85);
+    border: 1.5px solid rgba(255,255,255,0.95);
     border-radius:50%;
-    box-shadow: 0 0 15px rgba(255,255,255,0.2);
+    box-shadow: 0 0 12px rgba(0,0,0,0.4), 0 0 15px rgba(255,255,255,0.3);
     pointer-events: none;
     transition: transform 0.05s linear;
 }
