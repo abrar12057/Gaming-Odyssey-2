@@ -34,10 +34,14 @@
         #gameWrapper {
             /* Kept in sync with .game-wrapper in style.css — see the
                detailed comment there. Fills the viewport at a locked 3:2
-               ratio instead of capping out at a fixed 900x600. */
+               ratio instead of capping out at a fixed 900x600, and uses
+               100dvh (with 100vh fallback) so iPhone Safari's always-visible
+               address bar doesn't clip the bottom of the game off-screen. */
             position: relative;
             width: min(100vw, calc(100vh * 3 / 2));
+            width: min(100vw, calc(100dvh * 3 / 2));
             height: min(100vh, calc(100vw * 2 / 3));
+            height: min(100dvh, calc(100vw * 2 / 3));
             aspect-ratio: 3/2;
             overflow: hidden;
             border-radius: 16px;
@@ -79,7 +83,7 @@
         <div id="p2Joystick" class="joystick-base p2-joy"><div class="joystick-stick"></div></div>
         <button id="p2Shoot" class="shoot-btn p2-shoot" aria-label="Shoot P2">⚽</button>
     </div>
-    <div id="rotateWarning" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.92); z-index:200; justify-content:center; align-items:center; flex-direction:column; color:white; text-align:center; padding:20px; font-family:'Outfit',sans-serif;">
+    <div id="rotateWarning" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; height:100dvh; background:rgba(0,0,0,0.92); z-index:200; justify-content:center; align-items:center; flex-direction:column; color:white; text-align:center; padding:20px; font-family:'Outfit',sans-serif;">
         <div style="font-size:48px; margin-bottom:20px;">📱</div>
         <h2 style="margin-bottom:10px;">Please Rotate Your Device</h2>
         <p style="opacity:0.7; max-width:300px;">Pro Striker works best in landscape mode. Rotate your phone for the best experience.</p>
